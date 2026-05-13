@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Politidistrikt — Rettslige grunnlag</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f4f0; color: #1a1a18; }
+  .page { max-width: 1120px; margin: 0 auto; padding: 28px 24px; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #666; margin-bottom: 20px; }
+
+  .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
+  .controls label { font-size: 13px; font-weight: 500; color: #444; }
+  select {
+    font-size: 13px; font-family: inherit;
+    padding: 8px 32px 8px 12px;
+    border: 1px solid #ccc; border-radius: 8px;
+    background: white; color: #1a1a18;
+    appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+    min-width: 340px;
+  }
+  select:focus { outline: none; border-color: #185FA5; box-shadow: 0 0 0 2px #E6F1FB; }
+
+  .main { display: grid; grid-template-columns: 400px 1fr; gap: 24px; align-items: start; }
+  #map-wrap svg { width: 100%; display: block; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,0.1); }
+
+  .right { display: flex; flex-direction: column; gap: 18px; }
+  .panel { background: white; border: 1px solid #e0ddd6; border-radius: 10px; padding: 18px; }
+  .panel-title { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
+  .district-name { font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+  .district-sub { font-size: 12px; color: #888; margin-bottom: 12px; }
+  .big-stat { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+  .big-num { font-size: 40px; font-weight: 600; line-height: 1; color: #185FA5; }
+  .big-label { font-size: 13px; color: #666; }
+  .total-note { font-size: 12px; color: #aaa; margin-bottom: 12px; }
+  hr.div { border: none; border-top: 1px solid #eee; margin: 12px 0; }
+  .bar-section-title { font-size: 11px; font-weight: 500; color: #888; margin-bottom: 8px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; cursor: pointer; }
+  .bar-row:hover .bar-name { color: #185FA5; }
+  .bar-name { font-size: 12px; color: #555; width: 80px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.15s; }
+  .bar-track { flex: 1; background: #f0ede8; border-radius: 3px; height: 9px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.35s; }
+  .bar-count { font-size: 12px; width: 34px; text-align: right; flex-shrink: 0; }
+  .hint { font-size: 12px; color: #bbb; margin-top: 8px; }
+
+  .tbl-wrap { max-height: 340px; overflow-y: auto; border-radius: 8px; border: 1px solid #e0ddd6; }
+  table.summary { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.summary thead th { background: #2C2C2A; color: white; padding: 8px 10px; text-align: left; font-weight: 600; position: sticky; top: 0; z-index: 1; }
+  table.summary thead th:not(:first-child) { text-align: center; }
+  table.summary td { padding: 7px 10px; border-bottom: 1px solid #eee; cursor: pointer; }
+  table.summary td:not(:first-child) { text-align: center; }
+  table.summary tr:nth-child(even) td { background: #faf9f7; }
+  table.summary tr:hover td { background: #f0f4fa !important; }
+  table.summary tr.active-row td { background: #E6F1FB !important; font-weight: 600; }
+  table.summary tr.total-row td { background: #e8e6e0 !important; font-weight: 700; border-top: 2px solid #ccc; cursor: default; }
+
+  /* Bubble styles */
+  .bubble-group { cursor: pointer; }
+  .bubble-group circle.ring { fill: none; stroke: #fff; stroke-width: 2.5; opacity: 0; transition: opacity 0.15s; }
+  .bubble-group:hover circle.ring { opacity: 1; }
+  .bubble-group.active circle.bg { stroke: #1a1a18; stroke-width: 2.5; }
+  .bubble-group.active circle.ring { opacity: 0; }
+
+  .legend { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-top: 14px; font-size: 12px; color: #666; }
+
+  /* Color scale legend */
+  .color-legend { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .cl-box { width: 18px; height: 14px; border-radius: 3px; }
+  .cl-label { font-size: 11px; color: #666; }
+
+  @media print { .hint { display: none; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Anmeldelsessaker per politidistrikt</h1>
+  <p class="subtitle">Alle rettslige grunnlag med 5 eller flere saker. Kilde: 5 010 saker totalt.</p>
+
+  <div class="controls">
+    <label for="para-select">Rettslig grunnlag:</label>
+    <select id="para-select" onchange="onSelectChange()"></select>
+  </div>
+
+  <div class="main">
+    <div id="map-wrap"></div>
+    <div class="right">
+      <div class="panel">
+        <div class="panel-title" id="panel-para-label">§ 171 Tjenestefeil</div>
+        <div class="district-name" id="pn">Velg et distrikt</div>
+        <div class="district-sub" id="psub">Klikk på en boble</div>
+        <div class="big-stat"><span class="big-num" id="big-num">—</span><span class="big-label">saker</span></div>
+        <div class="total-note" id="total-note"></div>
+        <hr class="div">
+        <div class="bar-section-title" id="rank-title">Rangering — alle distrikter</div>
+        <div id="bars"></div>
+        <p class="hint">Klikk på en boble eller tabellrad for detaljer</p>
+      </div>
+      <div class="tbl-wrap">
+        <table class="summary" id="summary-table">
+          <thead><tr id="tbl-head"></tr></thead>
+          <tbody id="tbl-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span style="font-weight:600;font-size:12px">Fargeskala — andel av høyeste distrikt:</span>
+    <div class="color-legend">
+      <div class="cl-box" style="background:#E6F1FB"></div><span class="cl-label">Lavest</span>
+      <div class="cl-box" style="background:#85B7EB"></div>
+      <div class="cl-box" style="background:#378ADD"></div>
+      <div class="cl-box" style="background:#185FA5"></div>
+      <div class="cl-box" style="background:#0C3D6B"></div><span class="cl-label">Høyest</span>
+    </div>
+    <span style="font-size:12px;color:#888;margin-left:8px">Alle bobler like store — antallet vises inni</span>
+  </div>
+</div>
+
+<script>
+const PARAS = [
+  {num:"171", label:"§ 171 Tjenestefeil", total:3019},
+  {num:"172", label:"§ 172 Grovt uaktsom tjenestefeil", total:775},
+  {num:"271", label:"§ 271 Kroppskrenkelse", total:535},
+  {num:"209", label:"§ 209 Brudd på taushetsplikt", total:293},
+  {num:"3",   label:"Vegtrafikkloven § 3 Uaktsom kjøring", total:118},
+  {num:"321", label:"§ 321 Tyveri", total:51},
+  {num:"273", label:"§ 273 Kroppsskade", total:38},
+  {num:"272", label:"§ 272 Grov kroppskrenkelse", total:32},
+  {num:"188", label:"§ 188 Uforsiktig omgang m/skytevåpen", total:27},
+  {num:"351", label:"§ 351 Skadeverk", total:22},
+  {num:"274", label:"§ 274 Grov kroppsskade", total:21},
+  {num:"31",  label:"Vegtrafikkloven § 31", total:17},
+  {num:"221", label:"§ 221 Uriktig forklaring", total:16},
+  {num:"295", label:"§ 295 Misbruk av overmaktsforhold", total:15},
+  {num:"266", label:"§ 266 Hensynsløs atferd", total:11},
+  {num:"324", label:"§ 324 Underslag", total:9},
+  {num:"371", label:"§ 371 Bedrageri", total:9},
+  {num:"361", label:"§ 361 Hindre offentlig tjenestemann", total:7},
+  {num:"387", label:"§ 387 Ulovlig frihetsberøvelse", total:7},
+  {num:"222", label:"§ 222 Tvang", total:7},
+  {num:"298", label:"§ 298 Seksuell handling uten samtykke", total:6},
+  {num:"173", label:"§ 173 Misbruk av offentlig myndighet", total:6},
+  {num:"275", label:"§ 275 Drap", total:6},
+  {num:"388", label:"§ 388 Frihetsberøvelse", total:6},
+];
+
+const DATA_RAW = {"Agder":{"171":165,"172":51,"271":46,"209":20,"3":6,"321":4,"273":3,"272":3,"188":3,"351":0,"274":4,"31":2,"221":4,"295":0,"266":2,"324":0,"371":0,"361":0,"387":0,"222":0,"298":1,"173":0,"275":0,"388":2},"Finnmark":{"171":100,"172":23,"271":9,"209":10,"3":7,"321":0,"273":0,"272":3,"188":0,"351":0,"274":1,"31":0,"221":0,"295":0,"266":1,"324":0,"371":0,"361":0,"387":1,"222":0,"298":2,"173":0,"275":0,"388":0},"Innlandet":{"171":202,"172":50,"271":29,"209":25,"3":6,"321":2,"273":0,"272":2,"188":3,"351":0,"274":0,"31":1,"221":2,"295":2,"266":1,"324":0,"371":2,"361":0,"387":0,"222":1,"298":0,"173":0,"275":0,"388":0},"Møre og R.":{"171":127,"172":36,"271":14,"209":17,"3":8,"321":3,"273":2,"272":1,"188":0,"351":0,"274":1,"31":0,"221":1,"295":0,"266":0,"324":0,"371":0,"361":0,"387":0,"222":0,"298":0,"173":0,"275":0,"388":0},"Nordland":{"171":129,"172":41,"271":23,"209":20,"3":8,"321":1,"273":3,"272":2,"188":4,"351":1,"274":0,"31":2,"221":0,"295":0,"266":0,"324":0,"371":0,"361":0,"387":1,"222":0,"298":0,"173":0,"275":0,"388":0},"Oslo":{"171":639,"172":140,"271":117,"209":43,"3":25,"321":17,"273":16,"272":4,"188":5,"351":12,"274":5,"31":4,"221":5,"295":0,"266":1,"324":1,"371":6,"361":1,"387":3,"222":1,"298":2,"173":0,"275":3,"388":4},"Sør-Vest":{"171":272,"172":70,"271":54,"209":29,"3":13,"321":3,"273":2,"272":2,"188":1,"351":0,"274":1,"31":2,"221":0,"295":1,"266":1,"324":3,"371":0,"361":2,"387":0,"222":0,"298":0,"173":1,"275":2,"388":0},"Sør-Øst":{"171":351,"172":83,"271":64,"209":28,"3":12,"321":7,"273":1,"272":3,"188":4,"351":0,"274":3,"31":1,"221":2,"295":10,"266":0,"324":4,"371":0,"361":0,"387":1,"222":0,"298":0,"173":0,"275":0,"388":0},"Troms":{"171":104,"172":35,"271":20,"209":21,"3":5,"321":4,"273":0,"272":3,"188":2,"351":0,"274":1,"31":0,"221":0,"295":0,"266":0,"324":0,"371":0,"361":0,"387":0,"222":0,"298":0,"173":0,"275":0,"388":0},"Trøndelag":{"171":241,"172":78,"271":37,"209":20,"3":8,"321":3,"273":3,"272":1,"188":0,"351":2,"274":0,"31":4,"221":0,"295":0,"266":1,"324":0,"371":0,"361":0,"387":1,"222":1,"298":0,"173":1,"275":0,"388":0},"Vest":{"171":263,"172":78,"271":51,"209":23,"3":11,"321":1,"273":3,"272":5,"188":3,"351":1,"274":1,"31":0,"221":0,"295":2,"266":1,"324":0,"371":0,"361":0,"387":0,"222":1,"298":0,"173":2,"275":0,"388":0},"Øst":{"171":426,"172":90,"271":71,"209":37,"3":9,"321":6,"273":5,"272":3,"188":2,"351":6,"274":4,"31":1,"221":2,"295":0,"266":3,"324":1,"371":1,"361":4,"387":0,"222":3,"298":1,"173":2,"275":1,"388":0}};
+
+const GEO = [
+  {name:"Oslo",       lon:10.75, lat:59.91, total:983},
+  {name:"Øst",        lon:11.6,  lat:59.65, total:635},
+  {name:"Sør-Øst",    lon:9.8,   lat:59.05, total:544},
+  {name:"Sør-Vest",   lon:6.3,   lat:58.9,  total:439},
+  {name:"Vest",       lon:5.5,   lat:61.0,  total:427},
+  {name:"Trøndelag",  lon:10.5,  lat:63.8,  total:391},
+  {name:"Innlandet",  lon:10.5,  lat:61.4,  total:311},
+  {name:"Agder",      lon:7.8,   lat:58.15, total:287},
+  {name:"Nordland",   lon:15.5,  lat:67.0,  total:220},
+  {name:"Møre og R.", lon:7.8,   lat:62.7,  total:203},
+  {name:"Troms",      lon:19.5,  lat:69.5,  total:197},
+  {name:"Finnmark",   lon:26.0,  lat:70.3,  total:150},
+];
+
+const R = 22; // fixed radius for all bubbles
+const COLOR_SCALE = ["#E6F1FB","#85B7EB","#378ADD","#185FA5","#0C3D6B"];
+const ZERO_COLOR = "#ddd";
+let activePara = "171";
+let activeDistrict = null;
+
+function heatColor(val, maxVal) {
+  if (!val || maxVal === 0) return ZERO_COLOR;
+  const t = val / maxVal;
+  if (t > 0.75) return COLOR_SCALE[4];
+  if (t > 0.5)  return COLOR_SCALE[3];
+  if (t > 0.3)  return COLOR_SCALE[2];
+  if (t > 0.1)  return COLOR_SCALE[1];
+  return COLOR_SCALE[0];
+}
+function textColor(val, maxVal) {
+  if (!val || maxVal === 0) return '#aaa';
+  const t = val / maxVal;
+  return t > 0.3 ? '#fff' : '#185FA5';
+}
+
+// Dropdown
+const sel = document.getElementById('para-select');
+PARAS.forEach(p => {
+  const opt = document.createElement('option');
+  opt.value = p.num;
+  opt.textContent = `${p.label}  (${p.total.toLocaleString('no')} saker totalt)`;
+  sel.appendChild(opt);
+});
+
+// Map
+const W = 400, H = 590;
+const svg = d3.select('#map-wrap').append('svg').attr('viewBox', `0 0 ${W} ${H}`);
+const proj = d3.geoMercator().center([15, 65.5]).scale(800).translate([W/2, H/2]);
+const pathGen = d3.geoPath().projection(proj);
+
+d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(world => {
+  const countries = topojson.feature(world, world.objects.countries);
+  const norway = countries.features.find(f => +f.id === 578);
+  const neighborIds = [752, 246, 208];
+  const neighbors = countries.features.filter(f => neighborIds.includes(+f.id));
+
+  svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#D4EAF7').attr('rx', 8);
+  neighbors.forEach(f => svg.append('path').datum(f).attr('d', pathGen).attr('fill','#E8E6DF').attr('stroke','#C8C6BF').attr('stroke-width','0.6'));
+  svg.append('path').datum(norway).attr('d', pathGen).attr('fill','#D6EAC8').attr('stroke','#7AAD5A').attr('stroke-width','1');
+
+  GEO.forEach(d => {
+    const [px, py] = proj([d.lon, d.lat]);
+    const k = d.name.replace(/[\s.]/g,'_');
+
+    const g = svg.append('g')
+      .attr('class','bubble-group')
+      .attr('id','bg-'+k)
+      .style('cursor','pointer')
+      .on('click', () => showDistrict(d.name));
+
+    // Outer hover ring
+    g.append('circle').attr('class','ring')
+      .attr('cx', px).attr('cy', py).attr('r', R + 4)
+      .attr('fill','none').attr('stroke','#fff').attr('stroke-width','2.5').attr('opacity',0)
+      .style('pointer-events','none');
+
+    // Main bubble
+    g.append('circle').attr('class','bg').attr('id','bub-'+k)
+      .attr('cx', px).attr('cy', py).attr('r', R)
+      .attr('fill', ZERO_COLOR).attr('stroke','#fff').attr('stroke-width','1.5');
+
+    // Number inside
+    g.append('text').attr('class','val-txt').attr('id','val-'+k)
+      .attr('x', px).attr('y', py + 1)
+      .attr('text-anchor','middle').attr('dominant-baseline','middle')
+      .attr('font-size','10').attr('font-weight','700')
+      .attr('fill','#aaa').attr('pointer-events','none')
+      .text('0');
+
+    // District label below
+    g.append('text').attr('id','lbl-'+k)
+      .attr('x', px).attr('y', py + R + 10)
+      .attr('text-anchor','middle').attr('font-size','8').attr('font-weight','600')
+      .attr('fill','#2C4A18').attr('pointer-events','none')
+      .text(d.name);
+  });
+
+  // Hover effect for ring
+  svg.selectAll('.bubble-group')
+    .on('mouseenter', function() { d3.select(this).select('.ring').attr('opacity', 0.8); })
+    .on('mouseleave', function() { d3.select(this).select('.ring').attr('opacity', 0); });
+
+  updateMap("171");
+  buildTable("171");
+  showDistrict("Oslo");
+});
+
+function onSelectChange() {
+  activePara = document.getElementById('para-select').value;
+  updateMap(activePara);
+  buildTable(activePara);
+  const paraInfo = PARAS.find(p => p.num === activePara);
+  document.getElementById('panel-para-label').textContent = paraInfo.label;
+  document.getElementById('rank-title').textContent = `${paraInfo.label} — rangering`;
+  if (activeDistrict) showDistrict(activeDistrict);
+}
+
+function updateMap(pNum) {
+  const vals = GEO.map(d => DATA_RAW[d.name][pNum] || 0);
+  const maxVal = Math.max(...vals, 1);
+
+  GEO.forEach(d => {
+    const k = d.name.replace(/[\s.]/g,'_');
+    const val = DATA_RAW[d.name][pNum] || 0;
+    const bg = heatColor(val, maxVal);
+    const tc = textColor(val, maxVal);
+
+    d3.select('#bub-'+k).attr('fill', bg);
+    d3.select('#val-'+k)
+      .text(val > 0 ? val : '0')
+      .attr('fill', tc)
+      .attr('font-size', val >= 100 ? '8' : val >= 10 ? '10' : '11');
+  });
+}
+
+function showDistrict(name) {
+  activeDistrict = name;
+  const pNum = activePara;
+  const paraInfo = PARAS.find(p => p.num === pNum);
+  const geoD = GEO.find(d => d.name === name);
+  const val = DATA_RAW[name][pNum] || 0;
+
+  // Reset all active states
+  svg.selectAll('.bubble-group').classed('active', false);
+  svg.selectAll('.bubble-group circle.bg').attr('stroke','#fff').attr('stroke-width','1.5');
+
+  // Set active
+  const k = name.replace(/[\s.]/g,'_');
+  d3.select('#bg-'+k).classed('active', true);
+  d3.select('#bub-'+k).attr('stroke','#1a1a18').attr('stroke-width','2.5');
+
+  document.getElementById('pn').textContent = name + ' politidistrikt';
+  document.getElementById('psub').textContent = 'Totalt ' + geoD.total.toLocaleString('no') + ' saker med rettslig grunnlag';
+  document.getElementById('big-num').textContent = val.toLocaleString('no');
+  document.getElementById('total-note').textContent = `av ${paraInfo.total.toLocaleString('no')} totalt for dette grunnlaget (alle org.)`;
+
+  const vals = GEO.map(d => DATA_RAW[d.name][pNum] || 0);
+  const maxVal = Math.max(...vals, 1);
+  const sorted = [...GEO].sort((a,b) => (DATA_RAW[b.name][pNum]||0) - (DATA_RAW[a.name][pNum]||0));
+
+  document.getElementById('bars').innerHTML = sorted.map(d => {
+    const v = DATA_RAW[d.name][pNum] || 0;
+    const isThis = d.name === name;
+    const col = heatColor(v, maxVal);
+    return `<div class="bar-row" onclick="showDistrict('${d.name}')">
+      <span class="bar-name" style="font-weight:${isThis?700:400};color:${isThis?'#1a1a18':'#666'}">${d.name}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(v/maxVal*100)}%;background:${v?col:'#ddd'}"></div></div>
+      <span class="bar-count" style="color:${isThis?'#185FA5':'#888'};font-weight:${isThis?700:400}">${v}</span>
+    </div>`;
+  }).join('');
+
+  // Highlight table
+  document.querySelectorAll('#tbl-body tr').forEach(tr => {
+    tr.classList.toggle('active-row', tr.dataset.name === name);
+  });
+}
+
+function buildTable(pNum) {
+  const paraInfo = PARAS.find(p => p.num === pNum);
+  document.getElementById('tbl-head').innerHTML =
+    `<th>Politidistrikt</th><th>${paraInfo.label}</th><th>Totalt saker</th>`;
+
+  const sorted = [...GEO].sort((a,b) => (DATA_RAW[b.name][pNum]||0) - (DATA_RAW[a.name][pNum]||0));
+  const grandTotal = sorted.reduce((s,d) => s + (DATA_RAW[d.name][pNum]||0), 0);
+  const maxVal = DATA_RAW[sorted[0].name][pNum] || 1;
+
+  document.getElementById('tbl-body').innerHTML =
+    sorted.map(d => {
+      const v = DATA_RAW[d.name][pNum] || 0;
+      const col = heatColor(v, maxVal);
+      return `<tr data-name="${d.name}" onclick="showDistrict('${d.name}')">
+        <td>${d.name}</td>
+        <td><span style="display:inline-block;padding:2px 8px;border-radius:4px;background:${v?col:'#f0f0f0'};color:${v?textColor(v,maxVal):'#aaa'};font-weight:600;min-width:36px;text-align:center">${v}</span></td>
+        <td style="color:#888">${d.total.toLocaleString('no')}</td>
+      </tr>`;
+    }).join('') +
+    `<tr class="total-row"><td>Totalt (12 distrikt)</td><td style="font-weight:700;color:#185FA5">${grandTotal.toLocaleString('no')}</td><td>—</td></tr>`;
+}
+</script>
+</body>
+</html>
