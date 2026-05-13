@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spesialenhetens avgjørelser</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: white; color: #1a1a18; }
+  .page { max-width: 620px; margin: 0 auto; padding: 16px; }
+  h2 { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
+  .sub { font-size: 12px; color: #888; margin-bottom: 16px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 18px; }
+  .stat { background: #f5f4f0; border-radius: 7px; padding: 10px 12px; }
+  .stat .num { font-size: 22px; font-weight: 600; color: #1a1a18; }
+  .stat .lbl { font-size: 11px; color: #888; margin-top: 2px; }
+  .chart-wrap { position: relative; width: 100%; height: 260px; margin-bottom: 18px; }
+  .legend { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .leg-row { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; padding: 4px 6px; border-radius: 5px; transition: background 0.15s; }
+  .leg-row:hover { background: #f5f4f0; }
+  .leg-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+  .leg-label { flex: 1; color: #1a1a18; }
+  .leg-count { font-weight: 600; color: #1a1a18; white-space: nowrap; }
+  .leg-pct { color: #888; min-width: 48px; text-align: right; white-space: nowrap; }
+  .selected { background: #f0f4fa !important; }
+  .tooltip-box { background: #1a1a18; color: white; border-radius: 6px; padding: 8px 12px; font-size: 12px; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h2>Spesialenhetens avgjørelser</h2>
+  <p class="sub">Kilde: 5 010 saker totalt</p>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="num">5 010</div>
+      <div class="lbl">Totalt antall saker</div>
+    </div>
+    <div class="stat">
+      <div class="num" style="color:#0C447C">69,9 %</div>
+      <div class="lbl">Henlagt uten etterforsking</div>
+    </div>
+    <div class="stat">
+      <div class="num" style="color:#3B6D11">2,4 %</div>
+      <div class="lbl">Forelegg ilagt</div>
+    </div>
+    <div class="stat">
+      <div class="num" style="color:#854F0B">0,02 %</div>
+      <div class="lbl">Tiltale tatt ut</div>
+    </div>
+  </div>
+
+  <div class="chart-wrap">
+    <canvas id="pie" role="img" aria-label="Kakediagram over Spesialenhetens avgjørelser. Henlagt uten etterforsking utgjør 69,9 prosent av 5 010 saker.">Henlagt uten etterforsking: 3 502, Henlagt intet straffbart: 887, Ikke registrert: 201, Henlagt bevisets stilling: 195, Forelegg: 116, Andre: 109.</canvas>
+  </div>
+
+  <div class="legend" id="legend"></div>
+</div>
+
+<script>
+const DATA = [
+  {label:"Henlagt uten etterforsking",         n:3502, color:"#0C447C"},
+  {label:"Henlagt — intet straffbart forhold",  n:887,  color:"#185FA5"},
+  {label:"Ikke registrert",                     n:201,  color:"#888780"},
+  {label:"Henlagt — bevisets stilling",         n:195,  color:"#378ADD"},
+  {label:"Forelegg ilagt",                      n:116,  color:"#3B6D11"},
+  {label:"Andre / øvrige",                      n:51,   color:"#85B7EB"},
+  {label:"Påtaleunnlatelse",                    n:24,   color:"#639922"},
+  {label:"Henlagt — ukjent gjerningsperson",    n:22,   color:"#B4B2A9"},
+  {label:"Henlagt — foreldet",                  n:12,   color:"#D3D1C7"},
+];
+
+const total = DATA.reduce(function(s,d){ return s+d.n; }, 0);
+
+var chart = new Chart(document.getElementById('pie'), {
+  type: 'doughnut',
+  data: {
+    labels: DATA.map(function(d){ return d.label; }),
+    datasets: [{
+      data: DATA.map(function(d){ return d.n; }),
+      backgroundColor: DATA.map(function(d){ return d.color; }),
+      borderColor: '#ffffff',
+      borderWidth: 2,
+      hoverOffset: 10,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: '55%',
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: function(ctx) {
+            var v = ctx.parsed;
+            return '  ' + v.toLocaleString('no') + ' saker (' + (v/total*100).toFixed(1) + ' %)';
+          }
+        }
+      }
+    }
+  }
+});
+
+// Custom legend
+var legEl = document.getElementById('legend');
+DATA.forEach(function(d, i) {
+  var pct = (d.n/total*100).toFixed(1);
+  var row = document.createElement('div');
+  row.className = 'leg-row';
+  row.id = 'leg-'+i;
+  row.innerHTML =
+    '<div class="leg-swatch" style="background:'+d.color+'"></div>' +
+    '<span class="leg-label">'+d.label+'</span>' +
+    '<span class="leg-count">'+d.n.toLocaleString('no')+'</span>' +
+    '<span class="leg-pct">'+pct+' %</span>';
+
+  row.addEventListener('click', function() {
+    // Highlight slice
+    var meta = chart.getDatasetMeta(0);
+    var isHidden = meta.data[i].hidden;
+    meta.data[i].hidden = !isHidden;
+    row.classList.toggle('selected', !isHidden ? false : true);
+    chart.update();
+  });
+
+  legEl.appendChild(row);
+});
+</script>
+</body>
+</html>
