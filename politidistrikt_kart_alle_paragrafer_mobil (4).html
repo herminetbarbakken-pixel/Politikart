@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Politidistrikt — Rettslige grunnlag</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: white; color: #1a1a18; }
+  .page { max-width: 620px; margin: 0 auto; padding: 16px; }
+  .controls { margin-bottom: 14px; }
+  .controls label { font-size: 12px; font-weight: 500; color: #444; display: block; margin-bottom: 5px; }
+  select {
+    font-size: 13px; font-family: inherit; padding: 7px 28px 7px 10px;
+    border: 1px solid #ccc; border-radius: 7px; background: white; color: #1a1a18;
+    appearance: none; cursor: pointer; width: 100%;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+  }
+  .map-container { border-radius: 8px; overflow: hidden; background: #D4EAF7; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .map-container svg { width: 100%; display: block; }
+  .detail-panel { background: #f8f7f5; border-radius: 8px; padding: 14px; margin-bottom: 14px; border: 1px solid #e8e6e0; display: none; }
+  .dp-para { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .dp-name { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .dp-sub  { font-size: 12px; color: #888; margin-bottom: 10px; }
+  .dp-big  { font-size: 34px; font-weight: 600; color: #185FA5; line-height: 1; margin-bottom: 1px; }
+  .dp-note { font-size: 11px; color: #aaa; margin-bottom: 10px; }
+  .bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; cursor: pointer; }
+  .bar-name { font-size: 11px; color: #555; width: 72px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { flex: 1; background: #e8e6e0; border-radius: 2px; height: 8px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .bar-count { font-size: 11px; width: 28px; text-align: right; flex-shrink: 0; }
+  .hint { font-size: 11px; color: #bbb; text-align: center; padding: 8px 0; }
+  .tbl-wrap { border-radius: 8px; border: 1px solid #e0ddd6; overflow: hidden; margin-bottom: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { background: #2C2C2A; color: white; padding: 8px 10px; text-align: left; font-weight: 600; }
+  thead th:not(:first-child) { text-align: center; }
+  td { padding: 6px 10px; border-bottom: 1px solid #eee; cursor: pointer; }
+  td:not(:first-child) { text-align: center; }
+  tr:nth-child(even) td { background: #faf9f7; }
+  tr:hover td { background: #f0f4fa !important; }
+  tr.active-row td { background: #E6F1FB !important; font-weight: 600; }
+  tr.total-row td { background: #e8e6e0 !important; font-weight: 700; border-top: 2px solid #ccc; cursor: default; }
+  .legend { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 11px; color: #666; margin-bottom: 8px; }
+  .cl-box { width: 14px; height: 10px; border-radius: 2px; }
+  circle.bub { cursor: pointer; }
+  circle.bub:hover { opacity: 0.7; }
+  circle.bub.active { stroke: #1a1a18 !important; stroke-width: 2.5 !important; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="controls">
+    <label for="para-select">Velg rettslig grunnlag:</label>
+    <select id="para-select" onchange="onSelectChange()"></select>
+  </div>
+  <div class="map-container">
+    <svg id="the-map" viewBox="0 0 300 480"></svg>
+  </div>
+  <p class="hint" id="map-hint">Klikk på en boble for detaljer ↓</p>
+  <div class="detail-panel" id="detail-panel">
+    <div class="dp-para" id="dp-para"></div>
+    <div class="dp-name" id="dp-name"></div>
+    <div class="dp-sub"  id="dp-sub"></div>
+    <div class="dp-big"  id="dp-big"></div>
+    <div class="dp-note" id="dp-note"></div>
+    <div id="dp-bars"></div>
+  </div>
+  <div class="legend">
+    <span style="font-weight:600">Farge = andel av høyeste:</span>
+    <div style="display:flex;align-items:center;gap:4px">
+      <div class="cl-box" style="background:#E6F1FB"></div><span>Lavest</span>
+      <div class="cl-box" style="background:#85B7EB"></div>
+      <div class="cl-box" style="background:#378ADD"></div>
+      <div class="cl-box" style="background:#185FA5"></div>
+      <div class="cl-box" style="background:#0C3D6B"></div><span>Høyest</span>
+    </div>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr id="tbl-head"></tr></thead>
+      <tbody id="tbl-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const PARAS = [
+  {num:"171", label:"§ 171 Tjenestefeil", total:3019},
+  {num:"172", label:"§ 172 Grovt uaktsom tjenestefeil", total:775},
+  {num:"271", label:"§ 271 Kroppskrenkelse", total:535},
+  {num:"209", label:"§ 209 Brudd på taushetsplikt", total:293},
+  {num:"3",   label:"Vegtrafikkloven § 3 Uaktsom kjøring", total:118},
+  {num:"321", label:"§ 321 Tyveri", total:51},
+  {num:"273", label:"§ 273 Kroppsskade", total:38},
+  {num:"272", label:"§ 272 Grov kroppskrenkelse", total:32},
+  {num:"188", label:"§ 188 Uforsiktig omgang m/skytevåpen", total:27},
+  {num:"351", label:"§ 351 Skadeverk", total:22},
+  {num:"274", label:"§ 274 Grov kroppsskade", total:21},
+  {num:"31",  label:"Vegtrafikkloven § 31", total:17},
+  {num:"221", label:"§ 221 Uriktig forklaring", total:16},
+  {num:"295", label:"§ 295 Misbruk av overmaktsforhold", total:15},
+  {num:"266", label:"§ 266 Hensynsløs atferd", total:11},
+  {num:"324", label:"§ 324 Underslag", total:9},
+  {num:"371", label:"§ 371 Bedrageri", total:9},
+  {num:"361", label:"§ 361 Hindre offentlig tjenestemann", total:7},
+  {num:"387", label:"§ 387 Ulovlig frihetsberøvelse", total:7},
+  {num:"222", label:"§ 222 Tvang", total:7},
+  {num:"298", label:"§ 298 Seksuell handling uten samtykke", total:6},
+  {num:"173", label:"§ 173 Misbruk av offentlig myndighet", total:6},
+  {num:"275", label:"§ 275 Drap", total:6},
+  {num:"388", label:"§ 388 Frihetsberøvelse", total:6},
+];
+
+const DATA_RAW = {"Agder":{"171":165,"172":51,"271":46,"209":20,"3":6,"321":4,"273":3,"272":3,"188":3,"351":0,"274":4,"31":2,"221":4,"295":0,"266":2,"324":0,"371":0,"361":0,"387":0,"222":0,"298":1,"173":0,"275":0,"388":2},"Finnmark":{"171":100,"172":23,"271":9,"209":10,"3":7,"321":0,"273":0,"272":3,"188":0,"351":0,"274":1,"31":0,"221":0,"295":0,"266":1,"324":0,"371":0,"361":0,"387":1,"222":0,"298":2,"173":0,"275":0,"388":0},"Innlandet":{"171":202,"172":50,"271":29,"209":25,"3":6,"321":2,"273":0,"272":2,"188":3,"351":0,"274":0,"31":1,"221":2,"295":2,"266":1,"324":0,"371":2,"361":0,"387":0,"222":1,"298":0,"173":0,"275":0,"388":0},"Møre og R.":{"171":127,"172":36,"271":14,"209":17,"3":8,"321":3,"273":2,"272":1,"188":0,"351":0,"274":1,"31":0,"221":1,"295":0,"266":0,"324":0,"371":0,"361":0,"387":0,"222":0,"298":0,"173":0,"275":0,"388":0},"Nordland":{"171":129,"172":41,"271":23,"209":20,"3":8,"321":1,"273":3,"272":2,"188":4,"351":1,"274":0,"31":2,"221":0,"295":0,"266":0,"324":0,"371":0,"361":0,"387":1,"222":0,"298":0,"173":0,"275":0,"388":0},"Oslo":{"171":639,"172":140,"271":117,"209":43,"3":25,"321":17,"273":16,"272":4,"188":5,"351":12,"274":5,"31":4,"221":5,"295":0,"266":1,"324":1,"371":6,"361":1,"387":3,"222":1,"298":2,"173":0,"275":3,"388":4},"Sør-Vest":{"171":272,"172":70,"271":54,"209":29,"3":13,"321":3,"273":2,"272":2,"188":1,"351":0,"274":1,"31":2,"221":0,"295":1,"266":1,"324":3,"371":0,"361":2,"387":0,"222":0,"298":0,"173":1,"275":2,"388":0},"Sør-Øst":{"171":351,"172":83,"271":64,"209":28,"3":12,"321":7,"273":1,"272":3,"188":4,"351":0,"274":3,"31":1,"221":2,"295":10,"266":0,"324":4,"371":0,"361":0,"387":1,"222":0,"298":0,"173":0,"275":0,"388":0},"Troms":{"171":104,"172":35,"271":20,"209":21,"3":5,"321":4,"273":0,"272":3,"188":2,"351":0,"274":1,"31":0,"221":0,"295":0,"266":0,"324":0,"371":0,"361":0,"387":0,"222":0,"298":0,"173":0,"275":0,"388":0},"Trøndelag":{"171":241,"172":78,"271":37,"209":20,"3":8,"321":3,"273":3,"272":1,"188":0,"351":2,"274":0,"31":4,"221":0,"295":0,"266":1,"324":0,"371":0,"361":0,"387":1,"222":1,"298":0,"173":1,"275":0,"388":0},"Vest":{"171":263,"172":78,"271":51,"209":23,"3":11,"321":1,"273":3,"272":5,"188":3,"351":1,"274":1,"31":0,"221":0,"295":2,"266":1,"324":0,"371":0,"361":0,"387":0,"222":1,"298":0,"173":2,"275":0,"388":0},"Øst":{"171":426,"172":90,"271":71,"209":37,"3":9,"321":6,"273":5,"272":3,"188":2,"351":6,"274":4,"31":1,"221":2,"295":0,"266":3,"324":1,"371":1,"361":4,"387":0,"222":3,"298":1,"173":2,"275":1,"388":0}};
+
+const GEO = [
+  {name:"Oslo",       lon:10.75, lat:59.91, total:983},
+  {name:"Øst",        lon:11.6,  lat:59.65, total:635},
+  {name:"Sør-Øst",    lon:9.8,   lat:59.05, total:544},
+  {name:"Sør-Vest",   lon:6.3,   lat:58.9,  total:439},
+  {name:"Vest",       lon:5.5,   lat:61.0,  total:427},
+  {name:"Trøndelag",  lon:10.5,  lat:63.8,  total:391},
+  {name:"Innlandet",  lon:10.5,  lat:61.4,  total:311},
+  {name:"Agder",      lon:7.8,   lat:58.15, total:287},
+  {name:"Nordland",   lon:15.5,  lat:67.0,  total:220},
+  {name:"Møre og R.", lon:7.8,   lat:62.7,  total:203},
+  {name:"Troms",      lon:19.5,  lat:69.5,  total:197},
+  {name:"Finnmark",   lon:26.0,  lat:70.3,  total:150},
+];
+
+const R = 18;
+const COLORS = ["#E6F1FB","#85B7EB","#378ADD","#185FA5","#0C3D6B"];
+const ZERO = "#ddd";
+let activePara = "171";
+let activeDistrict = null;
+
+function heatColor(v, mx) {
+  if (!v || !mx) return ZERO;
+  const t = v/mx;
+  if (t > 0.75) return COLORS[4];
+  if (t > 0.5)  return COLORS[3];
+  if (t > 0.3)  return COLORS[2];
+  if (t > 0.1)  return COLORS[1];
+  return COLORS[0];
+}
+function textColor(v, mx) {
+  if (!v || !mx) return '#aaa';
+  return v/mx > 0.3 ? '#fff' : '#185FA5';
+}
+
+const sel = document.getElementById('para-select');
+PARAS.forEach(p => {
+  const o = document.createElement('option');
+  o.value = p.num;
+  o.textContent = p.label + ' (' + p.total.toLocaleString('no') + ')';
+  sel.appendChild(o);
+});
+
+const W=300, H=480;
+const svg  = d3.select('#the-map');
+const proj = d3.geoMercator().center([15,65.5]).scale(600).translate([W/2,H/2]);
+const pg   = d3.geoPath().projection(proj);
+const mapG = svg.append('g');
+const bubG = svg.append('g');
+
+d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(function(world) {
+  const feats = topojson.feature(world, world.objects.countries).features;
+  const norway = feats.find(function(f) { return +f.id===578; });
+
+  mapG.append('rect').attr('width',W).attr('height',H).attr('fill','#D4EAF7');
+  feats.filter(function(f){ return [752,246,208].includes(+f.id); }).forEach(function(f) {
+    mapG.append('path').datum(f).attr('d',pg).attr('fill','#E8E6DF').attr('stroke','#C8C6BF').attr('stroke-width','0.5');
+  });
+  mapG.append('path').datum(norway).attr('d',pg).attr('fill','#D6EAC8').attr('stroke','#7AAD5A').attr('stroke-width','0.8');
+
+  GEO.forEach(function(d) {
+    var pt = proj([d.lon, d.lat]);
+    var px = pt[0], py = pt[1];
+    var kid = d.name.replace(/[\s.]/g,'_');
+
+    var g = bubG.append('g').style('cursor','pointer').on('click', function() { showDistrict(d.name); });
+
+    g.append('circle').attr('class','bub').attr('id','b-'+kid)
+      .attr('cx',px).attr('cy',py).attr('r',R)
+      .attr('fill',ZERO).attr('stroke','#fff').attr('stroke-width','1.2');
+
+    g.append('text').attr('id','v-'+kid)
+      .attr('x',px).attr('y',py+1)
+      .attr('text-anchor','middle').attr('dominant-baseline','middle')
+      .attr('font-size','10').attr('font-weight','700')
+      .attr('fill','#aaa').attr('pointer-events','none').text('0');
+
+    g.append('text')
+      .attr('x',px).attr('y',py+R+10)
+      .attr('text-anchor','middle').attr('font-size','7').attr('font-weight','600')
+      .attr('fill','#2C4A18').attr('pointer-events','none')
+      .text(d.name==='Møre og R.'?'Møre':d.name);
+  });
+
+  updateMap('171');
+  buildTable('171');
+});
+
+function onSelectChange() {
+  activePara = sel.value;
+  updateMap(activePara);
+  buildTable(activePara);
+  var p = PARAS.find(function(x){ return x.num===activePara; });
+  document.getElementById('dp-para').textContent = p.label;
+  if (activeDistrict) showDistrict(activeDistrict);
+}
+
+function updateMap(pNum) {
+  var vals = GEO.map(function(d){ return DATA_RAW[d.name][pNum]||0; });
+  var mx = Math.max.apply(null, vals.concat([1]));
+  GEO.forEach(function(d) {
+    var kid = d.name.replace(/[\s.]/g,'_');
+    var val = DATA_RAW[d.name][pNum]||0;
+    var fs = val>=100?8:val>=10?10:11;
+    d3.select('#b-'+kid).attr('fill', heatColor(val,mx));
+    d3.select('#v-'+kid).text(val||'0').attr('fill', textColor(val,mx)).attr('font-size',fs);
+  });
+}
+
+function showDistrict(name) {
+  activeDistrict = name;
+  var pNum = activePara;
+  var p = PARAS.find(function(x){ return x.num===pNum; });
+  var geo = GEO.find(function(d){ return d.name===name; });
+  var val = DATA_RAW[name][pNum]||0;
+
+  bubG.selectAll('circle.bub').attr('stroke','#fff').attr('stroke-width','1.2').classed('active',false);
+  var kid = name.replace(/[\s.]/g,'_');
+  d3.select('#b-'+kid).attr('stroke','#1a1a18').attr('stroke-width','2.5').classed('active',true);
+
+  document.getElementById('detail-panel').style.display = 'block';
+  document.getElementById('map-hint').style.display = 'none';
+  document.getElementById('dp-para').textContent = p.label;
+  document.getElementById('dp-name').textContent = name + ' politidistrikt';
+  document.getElementById('dp-sub').textContent  = 'Totalt ' + geo.total.toLocaleString('no') + ' saker';
+  document.getElementById('dp-big').textContent  = val.toLocaleString('no');
+  document.getElementById('dp-note').textContent = 'av ' + p.total.toLocaleString('no') + ' totalt for dette grunnlaget';
+
+  var vals = GEO.map(function(d){ return DATA_RAW[d.name][pNum]||0; });
+  var mx = Math.max.apply(null, vals.concat([1]));
+  var sorted = GEO.slice().sort(function(a,b){ return (DATA_RAW[b.name][pNum]||0)-(DATA_RAW[a.name][pNum]||0); });
+
+  document.getElementById('dp-bars').innerHTML = sorted.map(function(d) {
+    var v = DATA_RAW[d.name][pNum]||0;
+    var isThis = d.name===name;
+    var col = heatColor(v,mx);
+    return '<div class="bar-row" onclick="showDistrict(\''+d.name+'\')">' +
+      '<span class="bar-name" style="font-weight:'+(isThis?700:400)+'">'+d.name+'</span>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:'+Math.round(v/mx*100)+'%;background:'+(v?col:ZERO)+'"></div></div>' +
+      '<span class="bar-count" style="color:'+(isThis?'#185FA5':'#888')+';font-weight:'+(isThis?700:400)+'">'+v+'</span>' +
+      '</div>';
+  }).join('');
+
+  document.querySelectorAll('#tbl-body tr').forEach(function(tr) {
+    tr.classList.toggle('active-row', tr.dataset.name===name);
+  });
+
+  document.getElementById('detail-panel').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function buildTable(pNum) {
+  var p = PARAS.find(function(x){ return x.num===pNum; });
+  document.getElementById('tbl-head').innerHTML =
+    '<th>Politidistrikt</th><th>'+p.label+'</th><th>Totalt</th>';
+  var sorted = GEO.slice().sort(function(a,b){ return (DATA_RAW[b.name][pNum]||0)-(DATA_RAW[a.name][pNum]||0); });
+  var grand = sorted.reduce(function(s,d){ return s+(DATA_RAW[d.name][pNum]||0); }, 0);
+  var mx = DATA_RAW[sorted[0].name][pNum]||1;
+  document.getElementById('tbl-body').innerHTML =
+    sorted.map(function(d) {
+      var v = DATA_RAW[d.name][pNum]||0;
+      var col = heatColor(v,mx);
+      return '<tr data-name="'+d.name+'" onclick="showDistrict(\''+d.name+'\')">' +
+        '<td>'+d.name+'</td>' +
+        '<td><span style="display:inline-block;padding:2px 7px;border-radius:4px;background:'+(v?col:'#f0f0f0')+';color:'+(v?textColor(v,mx):'#aaa')+';font-weight:600;min-width:32px;text-align:center">'+v+'</span></td>' +
+        '<td style="color:#888">'+d.total.toLocaleString('no')+'</td>' +
+        '</tr>';
+    }).join('') +
+    '<tr class="total-row"><td>Totalt</td><td style="color:#185FA5;font-weight:700">'+grand.toLocaleString('no')+'</td><td>—</td></tr>';
+}
+</script>
+</body>
+</html>
