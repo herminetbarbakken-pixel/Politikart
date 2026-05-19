@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Henlagt uten etterforsking per politidistrikt</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: white; color: #1a1a18; }
+  .page { max-width: 620px; margin: 0 auto; padding: 16px; }
+  h2 { font-size: 17px; font-weight: 600; margin-bottom: 3px; }
+  .sub { font-size: 12px; color: #888; margin-bottom: 14px; }
+
+  .toggle-wrap { display: flex; gap: 8px; margin-bottom: 14px; }
+  .tog { padding: 6px 14px; font-size: 12px; border-radius: 6px; border: 1px solid #ccc; cursor: pointer; background: #f5f4f0; color: #555; font-family: inherit; }
+  .tog.active { background: #0C447C; color: white; border-color: #0C447C; font-weight: 600; }
+
+  .map-container { border-radius: 8px; overflow: hidden; background: #D4EAF7; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .map-container svg { width: 100%; display: block; }
+
+  .detail-panel { background: #f8f7f5; border-radius: 8px; padding: 14px; margin-bottom: 14px; border: 1px solid #e8e6e0; display: none; }
+  .dp-title { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .dp-name  { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+  .dp-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .dp-stat  { background: white; border-radius: 6px; padding: 8px 10px; border: 1px solid #e8e6e0; }
+  .dp-stat .n { font-size: 22px; font-weight: 600; color: #0C447C; }
+  .dp-stat .l { font-size: 11px; color: #888; margin-top: 1px; }
+  .bar-section { font-size: 11px; font-weight: 500; color: #888; margin-bottom: 7px; }
+  .bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; cursor: pointer; }
+  .bar-name  { font-size: 11px; color: #555; width: 72px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { flex: 1; background: #e8e6e0; border-radius: 2px; height: 8px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 2px; transition: width 0.3s; background: #0C447C; }
+  .bar-count { font-size: 11px; width: 40px; text-align: right; flex-shrink: 0; color: #888; }
+
+  .hint { font-size: 11px; color: #bbb; text-align: center; padding: 8px 0; }
+
+  .tbl-wrap { border-radius: 8px; border: 1px solid #e0ddd6; overflow: hidden; margin-bottom: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { background: #2C2C2A; color: white; padding: 8px 10px; text-align: left; font-weight: 600; }
+  thead th:not(:first-child) { text-align: center; }
+  td { padding: 6px 10px; border-bottom: 1px solid #eee; cursor: pointer; }
+  td:not(:first-child) { text-align: center; }
+  tr:nth-child(even) td { background: #faf9f7; }
+  tr:hover td { background: #f0f4fa !important; }
+  tr.active-row td { background: #E6F1FB !important; font-weight: 600; }
+  tr.total-row td { background: #e8e6e0 !important; font-weight: 700; border-top: 2px solid #ccc; cursor: default; }
+
+  .legend { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 11px; color: #666; margin-bottom: 8px; }
+  .cl-box { width: 14px; height: 10px; border-radius: 2px; }
+
+  circle.bub { cursor: pointer; }
+  circle.bub:hover { opacity: 0.7; }
+  circle.bub.active { stroke: #1a1a18 !important; stroke-width: 2.5 !important; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h2>Henlagt uten etterforsking</h2>
+  <p class="sub">Per politidistrikt — kilde: 5 010 saker totalt</p>
+
+  <div class="toggle-wrap">
+    <button class="tog active" id="tog-antall" onclick="setMode('antall')">Antall saker</button>
+    <button class="tog" id="tog-pst" onclick="setMode('pst')">Andel i %</button>
+  </div>
+
+  <div class="map-container">
+    <svg id="the-map" viewBox="0 0 300 480"></svg>
+  </div>
+
+  <p class="hint" id="map-hint">Klikk på en boble for detaljer ↓</p>
+
+  <div class="detail-panel" id="detail-panel">
+    <div class="dp-title">Henlagt uten etterforsking</div>
+    <div class="dp-name" id="dp-name">—</div>
+    <div class="dp-stats">
+      <div class="dp-stat"><div class="n" id="dp-antall">—</div><div class="l">Antall saker</div></div>
+      <div class="dp-stat"><div class="n" id="dp-pst">—</div><div class="l">Andel av alle saker</div></div>
+      <div class="dp-stat"><div class="n" id="dp-total">—</div><div class="l">Totalt saker i distriktet</div></div>
+      <div class="dp-stat"><div class="n" id="dp-andre">—</div><div class="l">Øvrige avgjørelser</div></div>
+    </div>
+    <div class="bar-section" id="bar-title">Rangering — antall</div>
+    <div id="dp-bars"></div>
+  </div>
+
+  <div class="legend">
+    <span style="font-weight:600">Farge = andel av høyeste distrikt:</span>
+    <div style="display:flex;align-items:center;gap:4px">
+      <div class="cl-box" style="background:#C7D9EF"></div><span>Lavest</span>
+      <div class="cl-box" style="background:#6B9FCC"></div>
+      <div class="cl-box" style="background:#2B6CA3"></div>
+      <div class="cl-box" style="background:#0C447C"></div><span>Høyest</span>
+    </div>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Politidistrikt</th>
+          <th>Henlagt uten etterf.</th>
+          <th>Andel</th>
+          <th>Totalt</th>
+        </tr>
+      </thead>
+      <tbody id="tbl-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const DATA = [
+  {name:"Oslo",       lon:10.75, lat:59.91, uten:706, total:989},
+  {name:"Øst",        lon:11.6,  lat:59.65, uten:446, total:638},
+  {name:"Sør-Øst",    lon:9.8,   lat:59.05, uten:377, total:548},
+  {name:"Vest",       lon:5.5,   lat:61.0,  uten:307, total:431},
+  {name:"Sør-Vest",   lon:6.3,   lat:58.9,  uten:303, total:444},
+  {name:"Trøndelag",  lon:10.5,  lat:63.8,  uten:281, total:395},
+  {name:"Innlandet",  lon:10.5,  lat:61.4,  uten:224, total:311},
+  {name:"Agder",      lon:7.8,   lat:58.15, uten:186, total:290},
+  {name:"Møre og R.", lon:7.8,   lat:62.7,  uten:146, total:203},
+  {name:"Nordland",   lon:15.5,  lat:67.0,  uten:143, total:222},
+  {name:"Finnmark",   lon:26.0,  lat:70.3,  uten:114, total:150},
+  {name:"Troms",      lon:19.5,  lat:69.5,  uten:111, total:175},
+];
+
+DATA.forEach(function(d) { d.pst = d.uten/d.total*100; });
+
+const R = 18;
+let mode = 'antall';
+let activeDistrict = null;
+
+function getVal(d) { return mode==='antall' ? d.uten : d.pst; }
+function getMax()  { return Math.max.apply(null, DATA.map(getVal)); }
+
+function heatColor(v, mx) {
+  if (!v || !mx) return '#ddd';
+  var t = v/mx;
+  if (t > 0.75) return '#0C447C';
+  if (t > 0.5)  return '#2B6CA3';
+  if (t > 0.25) return '#6B9FCC';
+  return '#C7D9EF';
+}
+function textCol(v, mx) { return v/mx > 0.5 ? '#fff' : '#0C447C'; }
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tog-antall').className = 'tog' + (m==='antall'?' active':'');
+  document.getElementById('tog-pst').className    = 'tog' + (m==='pst'?' active':'');
+  updateMap();
+  buildTable();
+  if (activeDistrict) showDistrict(activeDistrict);
+}
+
+const W=300, H=480;
+const svg  = d3.select('#the-map');
+const proj = d3.geoMercator().center([15,65.5]).scale(600).translate([W/2,H/2]);
+const pg   = d3.geoPath().projection(proj);
+const mapG = svg.append('g');
+const bubG = svg.append('g');
+
+d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(function(world) {
+  var feats  = topojson.feature(world, world.objects.countries).features;
+  var norway = feats.find(function(f){ return +f.id===578; });
+
+  mapG.append('rect').attr('width',W).attr('height',H).attr('fill','#D4EAF7');
+  feats.filter(function(f){ return [752,246,208].includes(+f.id); }).forEach(function(f) {
+    mapG.append('path').datum(f).attr('d',pg).attr('fill','#E8E6DF').attr('stroke','#C8C6BF').attr('stroke-width','0.5');
+  });
+  mapG.append('path').datum(norway).attr('d',pg).attr('fill','#D6EAC8').attr('stroke','#7AAD5A').attr('stroke-width','0.8');
+
+  DATA.forEach(function(d) {
+    var pt = proj([d.lon, d.lat]);
+    var px = pt[0], py = pt[1];
+    var kid = d.name.replace(/[\s.]/g,'_');
+    var g = bubG.append('g').style('cursor','pointer').on('click', function(){ showDistrict(d.name); });
+
+    g.append('circle').attr('class','bub').attr('id','b-'+kid)
+      .attr('cx',px).attr('cy',py).attr('r',R)
+      .attr('fill','#ddd').attr('stroke','#fff').attr('stroke-width','1.2');
+
+    g.append('text').attr('id','v-'+kid)
+      .attr('x',px).attr('y',py+1)
+      .attr('text-anchor','middle').attr('dominant-baseline','middle')
+      .attr('font-size','9').attr('font-weight','700')
+      .attr('fill','#aaa').attr('pointer-events','none').text('');
+
+    g.append('text')
+      .attr('x',px).attr('y',py+R+10)
+      .attr('text-anchor','middle').attr('font-size','7').attr('font-weight','600')
+      .attr('fill','#2C4A18').attr('pointer-events','none')
+      .text(d.name==='Møre og R.'?'Møre':d.name);
+  });
+
+  updateMap();
+  buildTable();
+});
+
+function updateMap() {
+  var mx = getMax();
+  DATA.forEach(function(d) {
+    var kid = d.name.replace(/[\s.]/g,'_');
+    var v   = getVal(d);
+    var col = heatColor(v, mx);
+    var tc  = textCol(v, mx);
+    var txt = mode==='antall' ? d.uten : d.pst.toFixed(1)+'%';
+    var fs  = mode==='antall' ? (d.uten>=100?8:9) : 8;
+    d3.select('#b-'+kid).attr('fill', col);
+    d3.select('#v-'+kid).text(txt).attr('fill',tc).attr('font-size',fs);
+  });
+}
+
+function showDistrict(name) {
+  activeDistrict = name;
+  var d  = DATA.find(function(x){ return x.name===name; });
+  var mx = getMax();
+
+  bubG.selectAll('circle.bub').attr('stroke','#fff').attr('stroke-width','1.2').classed('active',false);
+  var kid = name.replace(/[\s.]/g,'_');
+  d3.select('#b-'+kid).attr('stroke','#1a1a18').attr('stroke-width','2.5').classed('active',true);
+
+  document.getElementById('detail-panel').style.display = 'block';
+  document.getElementById('map-hint').style.display = 'none';
+  document.getElementById('dp-name').textContent    = name + ' politidistrikt';
+  document.getElementById('dp-antall').textContent  = d.uten.toLocaleString('no');
+  document.getElementById('dp-pst').textContent     = d.pst.toFixed(1) + ' %';
+  document.getElementById('dp-total').textContent   = d.total.toLocaleString('no');
+  document.getElementById('dp-andre').textContent   = (d.total - d.uten).toLocaleString('no');
+  document.getElementById('bar-title').textContent  = mode==='antall' ? 'Rangering — antall saker' : 'Rangering — andel i %';
+
+  var sorted = DATA.slice().sort(function(a,b){ return getVal(b)-getVal(a); });
+  var barMax = getVal(sorted[0]);
+
+  document.getElementById('dp-bars').innerHTML = sorted.map(function(x) {
+    var v      = getVal(x);
+    var isThis = x.name===name;
+    var txt    = mode==='antall' ? v.toLocaleString('no') : v.toFixed(1)+'%';
+    return '<div class="bar-row" onclick="showDistrict(\''+x.name+'\')">' +
+      '<span class="bar-name" style="font-weight:'+(isThis?700:400)+';color:'+(isThis?'#1a1a18':'#555')+'">'+x.name+'</span>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:'+Math.round(v/barMax*100)+'%;background:'+(isThis?'#0C447C':'#6B9FCC')+'"></div></div>' +
+      '<span class="bar-count" style="font-weight:'+(isThis?700:400)+';color:'+(isThis?'#0C447C':'#888')+'">'+txt+'</span>' +
+      '</div>';
+  }).join('');
+
+  document.querySelectorAll('#tbl-body tr').forEach(function(tr){
+    tr.classList.toggle('active-row', tr.dataset.name===name);
+  });
+  document.getElementById('detail-panel').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function buildTable() {
+  var sorted = DATA.slice().sort(function(a,b){ return b.uten-a.uten; });
+  var grandUten  = sorted.reduce(function(s,d){ return s+d.uten; }, 0);
+  var grandTotal = sorted.reduce(function(s,d){ return s+d.total; }, 0);
+  var mx = DATA.reduce(function(mx,d){ return Math.max(mx,d.uten); }, 0);
+
+  document.getElementById('tbl-body').innerHTML =
+    sorted.map(function(d) {
+      var col = heatColor(d.uten, mx);
+      var tc  = textCol(d.uten, mx);
+      return '<tr data-name="'+d.name+'" onclick="showDistrict(\''+d.name+'\')">' +
+        '<td>'+d.name+'</td>' +
+        '<td><span style="display:inline-block;padding:2px 7px;border-radius:4px;background:'+col+';color:'+tc+';font-weight:600;min-width:32px;text-align:center">'+d.uten+'</span></td>' +
+        '<td style="font-weight:600;color:#0C447C">'+d.pst.toFixed(1)+' %</td>' +
+        '<td style="color:#888">'+d.total+'</td>' +
+        '</tr>';
+    }).join('') +
+    '<tr class="total-row"><td>Totalt</td><td style="color:#0C447C;font-weight:700">'+grandUten.toLocaleString('no')+'</td>' +
+    '<td style="color:#0C447C;font-weight:700">'+(grandUten/grandTotal*100).toFixed(1)+' %</td>' +
+    '<td>'+grandTotal.toLocaleString('no')+'</td></tr>';
+}
+</script>
+</body>
+</html>
